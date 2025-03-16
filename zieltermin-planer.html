@@ -1,0 +1,969 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <title>Zieltermin Planer</title>
+    <!-- LZString für Komprimierung -->
+    <script src="https://cdn.jsdelivr.net/npm/lz-string@1.4.4/libs/lz-string.min.js"></script>
+    <style>
+        html {
+          height: -webkit-fill-available;
+          height: fill-available;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background-color: #f0f0f0;
+            margin: 20px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            transition: padding-top 0.3s ease;
+            min-height: 100vh;
+            min-height: -webkit-fill-available;
+        }
+
+        .container {
+            width: 90%;
+            max-width: 800px;
+            position: relative;
+            padding-bottom: 60px; /* Footer-Höhe + Abstand */
+        }
+
+        .page-title {
+            text-align: center;
+            color: #2c3e50;
+            margin-bottom: 20px;
+        }
+
+        .config-header {
+            background: #3498db;
+            color: white;
+            padding: 10px 20px;
+            border-radius: 10px 10px 0 0;
+            cursor: pointer;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .config-header:after {
+            content: '▼';
+            transition: transform 0.3s;
+        }
+
+        .config-header.collapsed:after {
+            transform: rotate(-90deg);
+        }
+
+        .config-box {
+            background: #fff;
+            padding: 20px;
+            border-radius: 0 0 10px 10px;
+            margin-bottom: 20px;
+            box-shadow: 0 0 10px rgba(0,0,0,0.1);
+            transition: max-height 0.3s ease-out, padding 0.3s, margin 0.3s;
+            overflow: hidden;
+            max-height: 500px;
+        }
+
+        .config-box.collapsed {
+            max-height: 0;
+            padding-top: 0;
+            padding-bottom: 0;
+            margin-bottom: 0;
+            border-top: none;
+        }
+
+        .config-item {
+            margin: 10px 0;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .url-info {
+            font-size: 0.9em;
+            color: #666;
+            margin-top: 15px;
+            text-align: center;
+            padding: 5px;
+            background: #f5f5f5;
+            border-radius: 4px;
+        }
+
+        label {
+            min-width: 120px;
+        }
+
+        input, select {
+            padding: 8px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            flex: 1;
+        }
+
+        .countdown-box {
+            background: #fff;
+            padding: 20px;
+            border-radius: 10px;
+            margin: 20px 0;
+            text-align: center;
+            box-shadow: 0 0 10px rgba(0,0,0,0.1);
+            transition: all 0.3s ease;
+            position: relative;
+            display: flex;
+            flex-direction: column;
+        }
+        
+        .countdown-title {
+            display: none;
+            margin: 0;
+            font-size: 1.5em;
+            color: #2c3e50;
+        }
+        
+        .sticky-countdown {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            z-index: 1000;
+            border-radius: 0;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.3);
+            width: 100%;
+            max-width: 100%;
+            flex-direction: row;
+            align-items: center;
+            justify-content: space-between;
+            padding: 10px 20px;
+        }
+        
+        .sticky-countdown .countdown-title {
+            display: block;
+        }
+        
+        .sticky-countdown #countdown,
+        .sticky-countdown #workdays {
+            margin: 0 20px;
+            white-space: nowrap; /* Zeilenumbruch verhindern */
+            display: inline-block; /* Als Inline-Element behandeln */
+            padding: 0 10px; /* Optional: Luft zwischen Elementen */
+        }
+        
+        @media (max-width: 950px) {
+            .sticky-countdown #countdown,
+            .sticky-countdown #workdays {
+                font-size: 1.5em;
+                letter-spacing: -0.5px;
+            }
+        }
+        
+        @media (max-width: 800px) {
+            .sticky-countdown #countdown,
+            .sticky-countdown #workdays,
+            .sticky-countdown #countdown-title {
+                font-size: 1.2em;
+                letter-spacing: -0.5px;
+            }
+        }
+        
+        @media (max-width: 700px) {
+            .sticky-countdown #countdown,
+            .sticky-countdown #workdays {
+                font-size: 0.9em;
+                letter-spacing: -0.5px;
+            }
+        }
+        
+        .sticky-countdown #toggle-sticky {
+            position: static;
+            margin-left: auto;
+        }
+        
+        .has-sticky {
+            padding-top: 140px;
+        }
+        
+        #toggle-sticky {
+            position: absolute;
+            right: 15px;
+            bottom: 15px;
+            font-size: 12px;
+            padding: 5px 10px;
+            opacity: 0.8;
+        }
+
+        #countdown {
+            font-size: 2.5em;
+            color: #2c3e50;
+        }
+
+        #workdays {
+            font-size: 1.5em;
+            color: #34495e;
+        }
+
+        .calendar-container {
+            background: #fff;
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 0 10px rgba(0,0,0,0.1);
+        }
+
+        .month-header {
+            background-color: #3498db;
+            color: white;
+            border-radius: 5px;
+            padding: 10px;
+            margin: 10px 0;
+            font-weight: bold;
+            text-align: center;
+        }
+
+        table {
+            width: 99%;
+            border-collapse: collapse;
+            margin: 10px 0;
+        }
+
+        th {
+            background: #2980b9;
+            color: white;
+            padding: 10px;
+        }
+
+        td {
+            padding: 15px;
+            border: 1px solid #ecf0f1;
+            text-align: center;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+
+        .workday { background: #d4edda; }
+        .holiday { background: #f8d7da; }
+        .weekend { background: #f8f9fa; }
+        .vacation { background: #ffeeba !important; }
+        .today { border: 2px solid #3498db !important; }
+        .other-month { opacity: 0.5; }
+        .target-day { 
+            border: 2px solid #ff8000 !important; 
+            background-color: #fff000 !important; 
+            font-weight: bold;
+        }
+
+        .button {
+            background: #3498db;
+            color: white;
+            border: none;
+            padding: 8px 15px;
+            border-radius: 5px;
+            cursor: pointer;
+            margin: 5px;
+            transition: background 0.3s;
+        }
+
+        .button:hover {
+            background: #2980b9;
+        }
+
+        .url-tools {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            margin-top: 10px;
+        }
+
+        .url-display {
+            padding: 8px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 12px;
+            word-break: break-all;
+        }
+
+        .button-row {
+            display: flex;
+            justify-content: center;
+            gap: 10px;
+            margin-top: 5px;
+        }
+
+        .success-message {
+            color: #28a745;
+            font-size: 14px;
+            margin-top: 5px;
+            text-align: center;
+            opacity: 0;
+            transition: opacity 0.5s;
+        }
+
+        .visible {
+            opacity: 1;
+        }
+    
+        .footer-container {
+          position: fixed;
+          bottom: 0;
+          left: 0;
+          right: 0;
+          border-top: 1px solid #ecf0f1;
+          padding: 15px 20px;
+          z-index: 1000;
+          width: 150px;
+        }
+        
+        .version-info {
+            font-size: 0.7em;
+            color: #7f8c8d;
+            display: inline-flex;
+            gap: 15px;
+            align-items: center;
+        }
+        
+        .github-link {
+            color: #7f8c8d;
+            text-decoration: none;
+            transition: color 0.2s ease;
+        }
+        
+        .github-link:hover {
+            color: #3498db;
+            text-decoration: underline;
+        }
+        
+        /* Mobile-Spezifische Anpassungen */
+        @media (max-width: 768px) {
+          .container {
+            min-height: 100dvh;
+          }
+          
+          .footer-container {
+            padding: 12px 15px;
+            position: static !important;
+          }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1 class="page-title" id="pageTitle">Zieltermin</h1>
+        
+        <div class="config-header" id="configToggle">Einstellungen</div>
+        <div class="config-box" id="configContent">
+            <div class="config-item">
+                <label>Bezeichnung:</label>
+                <input type="text" id="eventName" value="Zieltermin">
+            </div>
+            <div class="config-item">
+                <label>Bundesland:</label>
+                <select id="stateSelect">
+                    <option value="BW">Baden-Württemberg</option>
+                    <option value="BY">Bayern</option>
+                    <option value="BE">Berlin</option>
+                    <option value="BB">Brandenburg</option>
+                    <option value="HB">Bremen</option>
+                    <option value="HH">Hamburg</option>
+                    <option value="HE">Hessen</option>
+                    <option value="MV">Mecklenburg-Vorpommern</option>
+                    <option value="NI">Niedersachsen</option>
+                    <option value="NW" selected>Nordrhein-Westfalen</option>
+                    <option value="RP">Rheinland-Pfalz</option>
+                    <option value="SL">Saarland</option>
+                    <option value="SN">Sachsen</option>
+                    <option value="ST">Sachsen-Anhalt</option>
+                    <option value="SH">Schleswig-Holstein</option>
+                    <option value="TH">Thüringen</option>
+                </select>
+            </div>
+            <div class="config-item">
+                <label>Zieldatum:</label>
+                <input type="date" id="targetDate">
+                <label for="targetTime">Zieluhrzeit:</label>
+                <input type="time" id="targetTime" name="targetTime" required>
+            </div>
+            <div class="url-info">Die URL wird automatisch aktualisiert und kann geteilt werden:</div>
+            
+            <div class="url-tools">
+                <div id="currentUrl" class="url-display"></div>
+                <div class="button-row">
+                    <button id="copyUrlBtn" class="button">URL kopieren</button>
+                </div>
+                <div id="successMessage" class="success-message"></div>
+            </div>
+        </div>
+
+        <div class="countdown-box" id="countdown-box">
+            <h2 class="countdown-title" id="countdown-title">Zieltermin</h2>
+            <div id="countdown"></div>
+            <div id="workdays"></div>
+            <button id="toggle-sticky" class="button">Countdown anheften</button>
+        </div>
+
+        <div class="calendar-container" id="calendar-container"></div>
+<div class="footer-container">
+<div class="version-info">
+<span>v1.0.0</span>
+<a href="https://github.com/ultrahochfreq/zieltermin-planer" target="_blank" class="github-link">GitHub Repository</a>
+</div>
+</div>
+    </div>
+
+    <script>
+        let vacationDays = new Set();
+        let holidaysCache = {};
+        let isUpdatingUrl = false;
+        let baseDateForDiff = null;
+
+        // Hilfsfunktion um ein Monat zum heutigen Datum hinzuzufügen
+        function getDefaultTargetDate() {
+            const date = new Date();
+            date.setMonth(date.getMonth() + 1);
+            return dateToString(date);
+        }
+
+        // Toggle für Countdown anheften
+        function initStickyToggle() {
+            const countdownBox = document.getElementById('countdown-box');
+            const toggleButton = document.getElementById('toggle-sticky');
+            
+            toggleButton.addEventListener('click', function() {
+                countdownBox.classList.toggle('sticky-countdown');
+                document.body.classList.toggle('has-sticky');
+                this.textContent = countdownBox.classList.contains('sticky-countdown') 
+                    ? 'Countdown lösen' : 'Countdown anheften';
+                updateUrlHash(); // URL aktualisieren, wenn sich der Status ändert
+            });
+        }
+
+        function updateCountdownTitle() {
+            const eventName = document.getElementById('eventName').value;
+            document.getElementById('countdown-title').textContent = eventName;
+        }
+
+        // Event-Listener für automatische Aktualisierung
+        document.getElementById('eventName').addEventListener('input', function() {
+            const eventName = this.value;
+            document.getElementById('pageTitle').textContent = eventName;
+            document.getElementById('countdown-title').textContent = eventName; // Titel im Banner aktualisieren
+            document.title = `Zeit bis ${eventName}`;
+            updateAll();
+            updateUrlHash(); // Automatische Aktualisierung
+        });
+        
+        document.getElementById('stateSelect').addEventListener('change', () => {
+            holidaysCache = {}; // Cache leeren bei Bundeslandwechsel
+            updateAll();
+            updateUrlHash(); // Automatische Aktualisierung
+        });
+        
+        document.getElementById('targetDate').addEventListener('change', () => {
+            updateAll();
+            updateUrlHash(); // Automatische Aktualisierung
+        });
+
+        document.getElementById('targetTime').addEventListener('change', () => {
+            updateAll();
+            updateUrlHash(); // Automatische Aktualisierung
+        });
+
+        // Einstellungen ein-/ausklappen
+        document.getElementById('configToggle').addEventListener('click', function() {
+            this.classList.toggle('collapsed');
+            document.getElementById('configContent').classList.toggle('collapsed');
+        });
+
+        // URL-Funktionen
+        document.getElementById('copyUrlBtn').addEventListener('click', function() {
+            const url = document.getElementById('currentUrl').textContent;
+            if (!url) {
+                updateUrlHash();
+                setTimeout(() => {
+                    copyCurrentUrl();
+                }, 100);
+            } else {
+                copyCurrentUrl();
+            }
+        });
+
+        function copyCurrentUrl() {
+            const url = document.getElementById('currentUrl').textContent;
+            navigator.clipboard.writeText(url).then(() => {
+                showSuccessMessage('URL in die Zwischenablage kopiert!');
+            }).catch(err => {
+                console.error('Fehler beim Kopieren: ', err);
+            });
+        }
+
+        function showSuccessMessage(message, isError = false) {
+            const element = document.getElementById('successMessage');
+            element.textContent = message;
+            element.style.color = isError ? '#dc3545' : '#28a745';
+            element.classList.add('visible');
+            
+            setTimeout(() => {
+                element.classList.remove('visible');
+            }, 3000);
+        }
+
+        function updateAll() {
+            updateCountdown();
+            calculateWorkdays();
+            generateCalendar();
+        }
+
+        function updateCountdown() {
+            const now = new Date();
+            const target = new Date(document.getElementById('targetDate').value);
+            
+            // Uhrzeit aus dem Uhrzeitfeld auslesen und anwenden
+            const timeValue = document.getElementById('targetTime').value;
+            if (timeValue) {
+                const [hours, minutes] = timeValue.split(':').map(Number);
+                target.setHours(hours, minutes, 0, 0);
+            } else {
+                // Fallback auf Mitternacht wenn keine Uhrzeit angegeben
+                target.setHours(0, 0, 0, 0);
+            }
+            
+            const diff = target - now;
+
+            if (diff < 0) {
+                document.getElementById('countdown').innerHTML = 
+                    `🎉 ${document.getElementById('eventName').value} erreicht!`;
+                return;
+            }
+
+            const days = Math.floor(diff / (1000 * 60 * 60 * 24));
+            const hours = Math.floor((diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+            const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
+            const seconds = Math.floor((diff % (1000 * 60)) / 1000);
+
+            document.getElementById('countdown').innerHTML = 
+                `${days}T ${hours.toString().padStart(2, '0')}h ` +
+                `${minutes.toString().padStart(2, '0')}m ${seconds.toString().padStart(2, '0')}s`;
+        }
+
+        function calculateWorkdays() {
+            const start = new Date();
+            const end = new Date(document.getElementById('targetDate').value);
+            const state = document.getElementById('stateSelect').value;
+            let workdays = 0;
+            
+            start.setHours(0,0,0,0);
+            end.setHours(23,59,59,999);
+
+            // Feiertage für alle betroffenen Jahre sammeln
+            const years = new Set([start.getFullYear(), end.getFullYear()]);
+            let holidays = [];
+            years.forEach(year => {
+                const cacheKey = `${year}-${state}`;
+                if (!holidaysCache[cacheKey]) {
+                    holidaysCache[cacheKey] = getHolidays(year, state);
+                }
+                holidays = holidays.concat(holidaysCache[cacheKey]);
+            });
+
+            const tempDate = new Date(start);
+            while(tempDate <= end) {
+                const dateStr = dateToString(tempDate);
+                if(!isWeekend(tempDate) && 
+                   !holidays.includes(dateStr) && 
+                   !vacationDays.has(dateStr)) {
+                    workdays++;
+                }
+                tempDate.setDate(tempDate.getDate() + 1);
+            }
+            
+            document.getElementById('workdays').textContent = `Verbleibende Arbeitstage: ${workdays}`;
+        }
+
+        function isWeekend(date) {
+            const day = date.getDay();
+            return day === 0 || day === 6;
+        }
+
+        function getHolidays(year, state) {
+            const easter = calculateEaster(year);
+            const holidays = {
+                'NEUJAHR': `${year}-01-01`,
+                'KARFREITAG': dateToString(addDays(easter, -2)),
+                'OSTERMONTAG': dateToString(addDays(easter, 1)),
+                'TAG_DER_ARBEIT': `${year}-05-01`,
+                'CHRISTI_HIMMELFAHRT': dateToString(addDays(easter, 39)),
+                'PFINGSTMONTAG': dateToString(addDays(easter, 50)),
+                'TAG_DER_DEUTSCHEN_EINHEIT': `${year}-10-03`,
+                'WEIHNACHTEN1': `${year}-12-25`,
+                'WEIHNACHTEN2': `${year}-12-26`
+            };
+
+            // Feiertage für alle Bundesländer
+            switch(state) {
+                case 'BW': // Baden-Württemberg
+                    holidays['DREIKOENIGE'] = `${year}-01-06`;
+                    holidays['FRONLEICHNAM'] = dateToString(addDays(easter, 60));
+                    holidays['ALLERHEILIGEN'] = `${year}-11-01`;
+                    break;
+                case 'BY': // Bayern
+                    holidays['DREIKOENIGE'] = `${year}-01-06`;
+                    holidays['FRONLEICHNAM'] = dateToString(addDays(easter, 60));
+                    holidays['ALLERHEILIGEN'] = `${year}-11-01`;
+                    holidays['MARIA_HIMMELFAHRT'] = `${year}-08-15`;
+                    break;
+                case 'BE': // Berlin
+                    holidays['FRAUENTAG'] = `${year}-03-08`;
+                    holidays['WELTFRAUENTAG'] = `${year}-03-08`;
+                    break;
+                case 'BB': // Brandenburg
+                    holidays['OSTERN'] = dateToString(easter);
+                    holidays['REFORMATIONSTAG'] = `${year}-10-31`;
+                    break;
+                case 'HB': // Bremen
+                    holidays['REFORMATIONSTAG'] = `${year}-10-31`;
+                    break;
+                case 'HH': // Hamburg
+                    holidays['REFORMATIONSTAG'] = `${year}-10-31`;
+                    break;
+                case 'HE': // Hessen
+                    holidays['FRONLEICHNAM'] = dateToString(addDays(easter, 60));
+                    break;
+                case 'MV': // Mecklenburg-Vorpommern
+                    holidays['REFORMATIONSTAG'] = `${year}-10-31`;
+                    holidays['FRAUENTAG'] = `${year}-03-08`;
+                    break;
+                case 'NI': // Niedersachsen
+                    holidays['REFORMATIONSTAG'] = `${year}-10-31`;
+                    break;
+                case 'NW': // Nordrhein-Westfalen
+                    holidays['FRONLEICHNAM'] = dateToString(addDays(easter, 60));
+                    holidays['ALLERHEILIGEN'] = `${year}-11-01`;
+                    break;
+                case 'RP': // Rheinland-Pfalz
+                    holidays['FRONLEICHNAM'] = dateToString(addDays(easter, 60));
+                    holidays['ALLERHEILIGEN'] = `${year}-11-01`;
+                    break;
+                case 'SL': // Saarland
+                    holidays['FRONLEICHNAM'] = dateToString(addDays(easter, 60));
+                    holidays['ALLERHEILIGEN'] = `${year}-11-01`;
+                    holidays['MARIA_HIMMELFAHRT'] = `${year}-08-15`;
+                    break;
+                case 'SN': // Sachsen
+                    holidays['REFORMATIONSTAG'] = `${year}-10-31`;
+                    holidays['BUSS_UND_BETTAG'] = calculateBussAndBettag(year);
+                    break;
+                case 'ST': // Sachsen-Anhalt
+                    holidays['DREIKOENIGE'] = `${year}-01-06`;
+                    holidays['REFORMATIONSTAG'] = `${year}-10-31`;
+                    break;
+                case 'SH': // Schleswig-Holstein
+                    holidays['REFORMATIONSTAG'] = `${year}-10-31`;
+                    break;
+                case 'TH': // Thüringen
+                    holidays['REFORMATIONSTAG'] = `${year}-10-31`;
+                    holidays['WELTKINDERTAG'] = `${year}-09-20`;
+                    break;
+            }
+
+            return Object.values(holidays);
+        }
+
+        function calculateBussAndBettag(year) {
+            // Buß- und Bettag: Mittwoch vor dem 23. November
+            const nov23 = new Date(year, 10, 23);
+            const dayOfWeek = nov23.getDay();
+            const daysToSubtract = (dayOfWeek + 4) % 7;
+            
+            const bussUndBettag = new Date(nov23);
+            bussUndBettag.setDate(nov23.getDate() - daysToSubtract);
+            
+            return dateToString(bussUndBettag);
+        }
+
+        function calculateEaster(year) {
+            const a = year % 19;
+            const b = Math.floor(year / 100);
+            const c = year % 100;
+            const d = Math.floor(b / 4);
+            const e = b % 4;
+            const f = Math.floor((b + 8) / 25);
+            const g = Math.floor((b - f + 1) / 3);
+            const h = (19*a + b - d - g + 15) % 30;
+            const i = Math.floor(c / 4);
+            const k = c % 4;
+            const l = (32 + 2*e + 2*i - h - k) % 7;
+            const m = Math.floor((a + 11*h + 22*l) / 451);
+            
+            const month = Math.floor((h + l - 7*m + 114) / 31);
+            const day = ((h + l - 7*m + 114) % 31) + 1;
+            
+            return new Date(year, month - 1, day);
+        }
+
+        function addDays(date, days) {
+            const result = new Date(date);
+            result.setDate(result.getDate() + days);
+            return result;
+        }
+
+        function dateToString(date) {
+            const year = date.getFullYear();
+            const month = (date.getMonth() + 1).toString().padStart(2, '0');
+            const day = date.getDate().toString().padStart(2, '0');
+            return `${year}-${month}-${day}`;
+        }
+
+        function parseDate(dateStr) {
+            const parts = dateStr.split('-');
+            return new Date(parseInt(parts[0]), parseInt(parts[1])-1, parseInt(parts[2]));
+        }
+
+        function getDayDifference(baseDate, targetDate) {
+            const base = new Date(baseDate);
+            const target = new Date(targetDate);
+            base.setHours(0, 0, 0, 0);
+            target.setHours(0, 0, 0, 0);
+            
+            return Math.round((target - base) / (1000 * 60 * 60 * 24));
+        }
+
+        function generateCalendar() {
+            const container = document.getElementById('calendar-container');
+            container.innerHTML = '';
+            
+            const today = new Date();
+            const target = new Date(document.getElementById('targetDate').value);
+            today.setHours(0,0,0,0);
+            target.setHours(0,0,0,0);
+            
+            // Setze globales Basisdatum für Differenzen
+            baseDateForDiff = new Date(today);
+            
+            let currentMonth = new Date(today);
+            currentMonth.setDate(1);
+            
+            while(currentMonth <= target) {
+                const monthStart = new Date(currentMonth);
+                const monthEnd = new Date(currentMonth.getFullYear(), currentMonth.getMonth() + 1, 0);
+                
+                // Monatsüberschrift
+                const header = document.createElement('div');
+                header.className = 'month-header';
+                header.textContent = monthStart.toLocaleDateString('de-DE', { 
+                    month: 'long', 
+                    year: 'numeric' 
+                });
+                container.appendChild(header);
+
+                // Kalendertabelle
+                const table = document.createElement('table');
+                const headerRow = document.createElement('tr');
+                ['Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa', 'So'].forEach(day => {
+                    const th = document.createElement('th');
+                    th.textContent = day;
+                    headerRow.appendChild(th);
+                });
+                table.appendChild(headerRow);
+
+                // Tage generieren
+                let row = document.createElement('tr');
+                const firstDay = new Date(monthStart);
+                const startOffset = (firstDay.getDay() + 6) % 7;
+
+                // Leerzellen für Anfang
+                for(let i = 0; i < startOffset; i++) {
+                    row.appendChild(document.createElement('td'));
+                }
+
+                // Hole Feiertage für aktuellen Monat und Bundesland
+                const state = document.getElementById('stateSelect').value;
+                const year = monthStart.getFullYear();
+                const cacheKey = `${year}-${state}`;
+                if (!holidaysCache[cacheKey]) {
+                    holidaysCache[cacheKey] = getHolidays(year, state);
+                }
+                const holidays = holidaysCache[cacheKey];
+
+                for(let day = 1; day <= monthEnd.getDate(); day++) {
+                    if(row.children.length === 7) {
+                        table.appendChild(row);
+                        row = document.createElement('tr');
+                    }
+
+                    const currentDate = new Date(monthStart.getFullYear(), monthStart.getMonth(), day);
+                    const dateStr = dateToString(currentDate);
+                    const isHoliday = holidays.includes(dateStr);
+                    
+                    const cell = document.createElement('td');
+                    cell.textContent = day;
+                    
+                    // Tage vor heute oder nach Zieldatum transparenter anzeigen
+                    if(currentDate < today || currentDate > target) {
+                        cell.classList.add('other-month');
+                    }
+                    
+                    if(vacationDays.has(dateStr)) cell.classList.add('vacation');
+                    if(currentDate.toDateString() === today.toDateString()) cell.classList.add('today');
+                    if(currentDate.toDateString() === target.toDateString()) cell.classList.add('target-day');
+                    
+                    if(isHoliday) {
+                        cell.classList.add('holiday');
+                    } else if(isWeekend(currentDate)) {
+                        cell.classList.add('weekend');
+                    } else {
+                        cell.classList.add('workday');
+                    }
+
+                    cell.onclick = () => toggleVacationDay(dateStr);
+                    row.appendChild(cell);
+                }
+
+                table.appendChild(row);
+                container.appendChild(table);
+                currentMonth.setMonth(currentMonth.getMonth() + 1);
+            }
+        }
+
+        function toggleVacationDay(dateStr) {
+            vacationDays.has(dateStr) ? vacationDays.delete(dateStr) : vacationDays.add(dateStr);
+            calculateWorkdays();
+            generateCalendar();
+            updateUrlHash(); // Automatische Aktualisierung
+        }
+
+        // URL-Hash-Funktionen mit Kompression
+        function updateUrlHash() {
+            if (isUpdatingUrl) return;
+            
+            // Kompaktes Daten-Objekt erstellen
+            const data = {
+                e: document.getElementById('eventName').value,
+                s: document.getElementById('stateSelect').value,
+                d: document.getElementById('targetDate').value,
+                t: document.getElementById('targetTime').value,
+                sticky: document.getElementById('countdown-box').classList.contains('sticky-countdown') // Sticky-Status speichern
+            };
+            
+            // Basisdatum für Differenzen setzen, falls nicht vorhanden
+            if (!baseDateForDiff) {
+                baseDateForDiff = new Date();
+                baseDateForDiff.setHours(0, 0, 0, 0);
+            }
+            
+            // Basisdatum im Datensatz speichern
+            data.b = dateToString(baseDateForDiff);
+            
+            // Urlaubstage als Differenztage speichern
+            if (vacationDays.size > 0) {
+                const diffDays = [];
+                vacationDays.forEach(dateStr => {
+                    const diff = getDayDifference(baseDateForDiff, dateStr);
+                    diffDays.push(diff);
+                });
+                
+                // Kompakt darstellen: Nur Differenzen zum Basisdatum
+                data.v = diffDays.join(',');
+            }
+            
+            // Mit LZString komprimieren
+            try {
+                const compressed = LZString.compressToBase64(JSON.stringify(data));
+                //window.history.replaceState(null, '', '#' + compressed);
+                
+                // URL in Anzeige aktualisieren
+                tmp_url = window.location.href.split("#")
+                document.getElementById('currentUrl').textContent = tmp_url[0] + '#' + compressed;
+            } catch (e) {
+                console.error('Fehler beim Aktualisieren der URL:', e);
+            }
+        }
+
+        function loadSettingsFromHash() {
+            isUpdatingUrl = true;
+            
+            try {
+                // Hash aus URL extrahieren
+                const hash = window.location.hash.substring(1);
+                if (!hash) {
+                    // Kein Hash - Standardwerte verwenden
+                    document.getElementById('targetDate').value = getDefaultTargetDate();
+                    isUpdatingUrl = false;
+                    return;
+                }
+                
+                // Hash gefunden - Einstellungsbereich einklappen
+                document.getElementById('configToggle').classList.add('collapsed');
+                document.getElementById('configContent').classList.add('collapsed');
+                
+                // Mit LZString dekomprimieren und JSON parsen
+                let data;
+                
+                try {
+                    // Versuchen als LZString-komprimierten String zu dekodieren
+                    data = JSON.parse(LZString.decompressFromBase64(hash));
+                } catch (e) {
+                    // Fallback: Versuche als normalen Base64-String zu dekodieren (für alte URLs)
+                    data = JSON.parse(atob(hash));
+                }
+                
+                // Basisdatum für Differenzen setzen
+                if (data.b) {
+                    baseDateForDiff = parseDate(data.b);
+                } else {
+                    baseDateForDiff = new Date();
+                    baseDateForDiff.setHours(0, 0, 0, 0);
+                }
+                
+                // Werte in die UI einfügen
+                if (data.e) {
+                    document.getElementById('eventName').value = data.e;
+                    document.getElementById('pageTitle').textContent = data.e;
+                    document.getElementById('countdown-title').textContent = data.e;
+                }
+                if (data.s) document.getElementById('stateSelect').value = data.s;
+                if (data.d) document.getElementById('targetDate').value = data.d;
+                if (data.t) document.getElementById('targetTime').value = data.t;
+                
+                // Angehefteten Status setzen, falls in URL gespeichert
+                if (data.sticky === true) {
+                    document.getElementById('countdown-box').classList.add('sticky-countdown');
+                    document.body.classList.add('has-sticky');
+                    document.getElementById('toggle-sticky').textContent = 'Countdown lösen';
+                }
+                
+                // Urlaubstage aus Differenztagen rekonstruieren
+                vacationDays = new Set();
+                if (data.v) {
+                    const diffs = data.v.split(',').map(d => parseInt(d));
+                    diffs.forEach(diff => {
+                        const date = new Date(baseDateForDiff);
+                        date.setDate(date.getDate() + diff);
+                        vacationDays.add(dateToString(date));
+                    });
+                }
+                
+                // URL in Anzeige aktualisieren
+                document.getElementById('currentUrl').textContent = window.location.href;
+                document.title = `Zeit bis ${document.getElementById('eventName').value}`;
+                
+                isUpdatingUrl = false;
+            } catch (e) {
+                console.error('Fehler beim Laden der Einstellungen:', e);
+                document.getElementById('targetDate').value = getDefaultTargetDate();
+                isUpdatingUrl = false;
+            }
+        }
+
+        // Initialisierung
+        document.addEventListener('DOMContentLoaded', () => {
+            loadSettingsFromHash();
+            initStickyToggle();
+            document.title = `Zeit bis ${document.getElementById('eventName').value}`;
+            updateCountdownTitle(); // Countdown-Titel initialisieren
+            updateAll();
+            document.getElementById('currentUrl').textContent = window.location.href;
+            setInterval(updateCountdown, 1000);
+        });
+    </script>
+</body>
+</html>
